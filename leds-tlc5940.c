@@ -40,7 +40,7 @@ struct tlc5940_led {
 	int                 id;
 	int                 brightness;
 	char                name[sizeof("tlc5940-00")];
-	u8                 *fb;
+	u16                *fb;
 
 	struct mutex       *mutex;
 	struct work_struct  work;
@@ -49,43 +49,20 @@ struct tlc5940_led {
 
 struct tlc5940 {
 	struct tlc5940_led leds[TLC5940_MAX_LEDS];
-	u8                 fb[TLC5940_MAX_LEDS];
-	unsigned int       gpio_blank;
+	u16                fb[TLC5940_MAX_LEDS];
+	int                gpio_blank;
 	struct pwm_device *pwm;
 
 	struct mutex       mutex;
 };
 
-#define GS_DUO(a, b)			((a) >> 4), ((a) << 4) | ((b) >> 8), (b)
-#define DC_QUARTET(a, b, c, d)	((a) << 2) | ((b) >> 4), \
-								((b) << 4) | ((c) >> 2), \
-								((c) << 6) | (d)
-
-#define FB_OFFSET_BITS(__led)   ( \
-								  (TLC5940_FB_SIZE_BITS) - \
-								  (TLC5940_GS_CHANNEL_WIDTH * ((__led) + 1)) \
-								)
-#define FB_OFFSET(__led)        (FB_OFFSET_BITS(__led) >> 3)
 
 static void tlc5940_led_work(struct work_struct *work)
 {
 	struct tlc5940_led *led = container_of(work, struct tlc5940_led, work);
-	u8 *const fb = led->fb;
-	const int id = led->id;
-	const int brightness = led->brightness;
-
-	u8 const offset = FB_OFFSET(id);
-	u8 const mid_byte = id % 2 == 0;
 
 	mutex_lock(led->mutex);
 
-	if (mid_byte) {
-		fb[offset] = (fb[offset] & 0xf0) | brightness >> 8;
-		fb[offset + 1] = brightness & 0xff;
-	} else {
-		fb[offset] = brightness >> 4;
-		fb[offset + 1] = (fb[offset + 1] & 0x0f) | ((brightness << 4 & 0xf0));
-	}
 
 	mutex_unlock(led->mutex);
 
@@ -100,9 +77,15 @@ static void tlc5940_set_brightness(struct led_classdev *ldev,
 	  ldev
 	);
 
+	u16 *const fb = led->fb;
+	const int id = led->id;
+	const u16 scaled_brightness = clamp(((u16) brightness) << 4, 0x000, 0xfff);
+
 	spin_lock(&led->lock);
-	led->brightness = brightness;
-	schedule_work(&led->work);
+	{
+		fb[id] = scaled_brightness;
+		schedule_work(&led->work);
+	}
 	spin_unlock(&led->lock);
 }
 
