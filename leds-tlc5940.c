@@ -1,0 +1,202 @@
+/*
+ * Copyright 2016
+ * Jordan Yelloz <jordan@yelloz.me>
+ *
+ * Based on:
+ *  - leds-dac124s085.c by Guennadi Liakhovetski <lg@denx.de>
+ *
+ * This file is subject to the terms and conditions of version 2 of
+ * the GNU General Public License.  See the file COPYING in the main
+ * directory of this archive for more details.
+ *
+ * LED driver for the TLC5940 SPI
+ */
+
+#include <linux/leds.h>
+#include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/workqueue.h>
+#include <linux/spi/spi.h>
+#include <linux/gpio.h>
+#include <linux/pwm.h>
+
+#include "tlc5940-timing.h"
+
+#define TLC5940_MAX_LEDS   16
+#define TLC5940_GS_CHANNEL_WIDTH 12
+
+#define TLC5940_BITS_PER_WORD 12
+#define TLC5940_MAX_SPEED_HZ ((u32) (1e6))
+
+#define TLC5940_FB_SIZE_BITS ((TLC5940_MAX_LEDS) * TLC5940_GS_CHANNEL_WIDTH)
+#define TLC5940_FB_SIZE (TLC5940_FB_SIZE_BITS >> 3)
+
+struct tlc5940_led {
+	struct led_classdev ldev;
+	struct spi_device  *spi;
+	struct pwm_device  *pwm;
+	int                 id;
+	int                 brightness;
+	char                name[sizeof("tlc5940-00")];
+	u8                 *fb;
+
+	struct mutex       *mutex;
+	struct work_struct  work;
+	spinlock_t          lock;
+};
+
+struct tlc5940 {
+	struct tlc5940_led leds[TLC5940_MAX_LEDS];
+	u8                 fb[TLC5940_MAX_LEDS];
+	unsigned int       gpio_blank;
+	struct pwm_device *pwm;
+
+	struct mutex       mutex;
+};
+
+#define GS_DUO(a, b)			((a) >> 4), ((a) << 4) | ((b) >> 8), (b)
+#define DC_QUARTET(a, b, c, d)	((a) << 2) | ((b) >> 4), \
+								((b) << 4) | ((c) >> 2), \
+								((c) << 6) | (d)
+
+#define FB_OFFSET_BITS(__led)   ( \
+								  (TLC5940_FB_SIZE_BITS) - \
+								  (TLC5940_GS_CHANNEL_WIDTH * ((__led) + 1)) \
+								)
+#define FB_OFFSET(__led)        (FB_OFFSET_BITS(__led) >> 3)
+
+static void tlc5940_led_work(struct work_struct *work)
+{
+	struct tlc5940_led *led = container_of(work, struct tlc5940_led, work);
+	u8 *const fb = led->fb;
+	const int id = led->id;
+	const int brightness = led->brightness;
+
+	u8 const offset = FB_OFFSET(id);
+	u8 const mid_byte = id % 2 == 0;
+
+	mutex_lock(led->mutex);
+
+	if (mid_byte) {
+		fb[offset] = (fb[offset] & 0xf0) | brightness >> 8;
+		fb[offset + 1] = brightness & 0xff;
+	} else {
+		fb[offset] = brightness >> 4;
+		fb[offset + 1] = (fb[offset + 1] & 0x0f) | ((brightness << 4 & 0xf0));
+	}
+
+	mutex_unlock(led->mutex);
+
+}
+
+static void tlc5940_set_brightness(struct led_classdev *ldev,
+								   enum led_brightness brightness)
+{
+	struct tlc5940_led *const led = container_of(
+	  ldev,
+	  struct tlc5940_led,
+	  ldev
+	);
+
+	spin_lock(&led->lock);
+	led->brightness = brightness;
+	schedule_work(&led->work);
+	spin_unlock(&led->lock);
+}
+
+static int tlc5940_probe(struct spi_device *const spi)
+{
+	struct device *const dev = &(spi->dev);
+	struct tlc5940 *tlc;
+	struct tlc5940_led *led;
+	int i, ret;
+
+	tlc = devm_kzalloc(&spi->dev, sizeof(*tlc), GFP_KERNEL);
+	if (!tlc)
+		return -ENOMEM;
+
+	spi->bits_per_word = TLC5940_BITS_PER_WORD;
+	ret = devm_gpio_request(dev, tlc->gpio_blank, "TLC5940 BLANK");
+	if (ret) {
+		dev_err(dev, "Failed to request BLANK pin:%d\n", ret);
+		return ret;
+	}
+
+	mutex_init(&tlc->mutex);
+
+	for (i = 0; i < ARRAY_SIZE(tlc->leds); i++) {
+		led		= tlc->leds + i;
+		led->id		= i;
+		led->brightness	= LED_OFF;
+		led->spi	= spi;
+		led->fb = tlc->fb;
+		led->mutex = &tlc->mutex;
+		snprintf(led->name, sizeof(led->name), "tlc5940-%d", i);
+		spin_lock_init(&led->lock);
+		INIT_WORK(&led->work, tlc5940_led_work);
+		led->ldev.name = led->name;
+		led->ldev.brightness = LED_OFF;
+		led->ldev.max_brightness = 0xfff;
+		led->ldev.brightness_set = tlc5940_set_brightness;
+		ret = led_classdev_register(&spi->dev, &led->ldev);
+		if (ret < 0)
+			goto eledcr;
+	}
+
+	spi_set_drvdata(spi, tlc);
+
+	return 0;
+
+eledcr:
+	while (i--)
+		led_classdev_unregister(&tlc->leds[i].ldev);
+
+	return ret;
+}
+
+static int tlc5940_remove(struct spi_device *const spi)
+{
+	struct tlc5940 *const tlc = spi_get_drvdata(spi);
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(tlc->leds); i++) {
+		led_classdev_unregister(&tlc->leds[i].ldev);
+		cancel_work_sync(&tlc->leds[i].work);
+	}
+
+	return 0;
+}
+
+static struct spi_driver tlc5940_driver = {
+	.probe		= tlc5940_probe,
+	.remove		= tlc5940_remove,
+	.driver = {
+		.name	= "tlc5940",
+		.owner	= THIS_MODULE,
+	},
+};
+
+static int tlc5940_register_driver (struct spi_driver *const sdrv)
+{
+    int ret = spi_register_driver(sdrv);
+	return ret;
+}
+
+static inline void tlc5940_unregister_driver(struct spi_driver *sdrv)
+{
+	spi_unregister_driver (sdrv);
+}
+
+module_driver(
+  tlc5940_driver,
+  tlc5940_register_driver,
+  tlc5940_unregister_driver
+);
+/* module_spi_driver(tlc5940_driver); */
+
+MODULE_AUTHOR("Jordan Yelloz <jordan@yelloz.me");
+MODULE_DESCRIPTION("TLC5940 LED driver");
+MODULE_LICENSE("GPL v2");
+MODULE_ALIAS("spi:tlc5940");
