@@ -206,8 +206,11 @@ static int
 tlc5940_remove(struct spi_device *const spi)
 {
 	struct tlc5940 *const tlc = spi_get_drvdata(spi);
+	struct hrtimer *const timer = &tlc->timer;
 	struct tlc5940_led *led;
 	int i;
+
+	hrtimer_cancel(timer);
 
 	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
 		led = &tlc->leds[i];
