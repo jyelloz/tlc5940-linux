@@ -162,6 +162,8 @@ static int tlc5940_probe(struct spi_device *const spi)
 		dev_err(dev, "Failed to request BLANK pin:%d\n", ret);
 		return ret;
 	}
+	/* this can be HIGH initially to avoid an initial flicker */
+	gpio_direction_output(tlc->gpio_blank, 1);
 
 	hrtimer_init(timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	timer->function = tlc5940_timer_func;
