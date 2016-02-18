@@ -30,6 +30,8 @@
 #define TLC5940_BITS_PER_WORD 12
 #define TLC5940_MAX_SPEED_HZ ((u32) (1e6))
 
+#define TLC5940_LED_DRVDATA(_led) ( \
+							  (struct tlc5940 *) spi_get_drvdata(_led->spi) )
 
 struct tlc5940_led {
 	struct led_classdev ldev;
@@ -48,12 +50,18 @@ struct tlc5940_led {
 struct tlc5940 {
 	struct tlc5940_led leds[TLC5940_MAX_LEDS];
 	u16                fb[TLC5940_MAX_LEDS];
+	bool               new_gs_data;
 	int                gpio_blank;
 	struct pwm_device *pwm;
 
 	struct mutex       mutex;
 };
 
+static void
+set_new_gs_data(struct tlc5940_led *const led, const bool value)
+{
+	TLC5940_LED_DRVDATA(led)->new_gs_data = value;
+}
 
 static void tlc5940_led_work(struct work_struct *work)
 {
@@ -61,6 +69,7 @@ static void tlc5940_led_work(struct work_struct *work)
 
 	mutex_lock(led->mutex);
 
+	set_new_gs_data (led, 1);
 
 	mutex_unlock(led->mutex);
 
