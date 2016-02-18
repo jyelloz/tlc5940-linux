@@ -30,8 +30,6 @@
 #define TLC5940_BITS_PER_WORD 12
 #define TLC5940_MAX_SPEED_HZ ((u32) (1e6))
 
-#define TLC5940_FB_SIZE_BITS ((TLC5940_MAX_LEDS) * TLC5940_GS_CHANNEL_WIDTH)
-#define TLC5940_FB_SIZE (TLC5940_FB_SIZE_BITS >> 3)
 
 struct tlc5940_led {
 	struct led_classdev ldev;
