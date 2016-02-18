@@ -66,7 +66,8 @@ set_new_gs_data(struct tlc5940_led *const led, const bool value)
 	TLC5940_LED_DRVDATA(led)->new_gs_data = value;
 }
 
-static void tlc5940_led_work(struct work_struct *work)
+static void
+tlc5940_led_work(struct work_struct *work)
 {
 	struct tlc5940_led *led = container_of(work, struct tlc5940_led, work);
 
@@ -78,8 +79,9 @@ static void tlc5940_led_work(struct work_struct *work)
 
 }
 
-static void tlc5940_set_brightness(struct led_classdev *ldev,
-								   enum led_brightness brightness)
+static void
+tlc5940_set_brightness(struct led_classdev *const ldev,
+					   const enum led_brightness brightness)
 {
 	struct tlc5940_led *const led = container_of(
 	  ldev,
@@ -155,7 +157,8 @@ eledcr:
 	return ret;
 }
 
-static int tlc5940_remove(struct spi_device *const spi)
+static int
+tlc5940_remove(struct spi_device *const spi)
 {
 	struct tlc5940 *const tlc = spi_get_drvdata(spi);
 	int i;
