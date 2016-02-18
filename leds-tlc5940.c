@@ -83,7 +83,10 @@ tlc5940_timer_func(struct hrtimer *const timer)
 
 	struct tlc5940 *const tlc = container_of(timer, struct tlc5940, timer);
 	struct device *const dev = &tlc->spi->dev;
+	struct spi_transfer *const transfer = &tlc->transfer;
+	u16 *const fb = &(tlc->fb[0]);
 	const int gpio_blank = tlc->gpio_blank;
+	int ret;
 
 	hrtimer_forward_now(timer, ktime_set(0, BLANK_PERIOD_NS));
 
@@ -95,6 +98,21 @@ tlc5940_timer_func(struct hrtimer *const timer)
 	gpio_set_value(gpio_blank, 1);
 	gpio_set_value(gpio_blank, 0);
 
+	if (tlc->new_gs_data) {
+
+		ret = spi_sync(
+		  spi,
+		  transfer
+		);
+
+		if (ret) {
+			dev_err(dev, "spi transfer error: %d, expiring timer\n", ret);
+			return HRTIMER_NORESTART;
+		}
+
+		tlc->new_gs_data = 0;
+
+	}
 
 	return HRTIMER_RESTART;
 
@@ -147,6 +165,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 	  GFP_KERNEL
 	);
 	struct hrtimer *const timer = &tlc->timer;
+	struct spi_transfer *const transfer = &tlc->transfer;
 	struct tlc5940_led *led;
 	int i, ret;
 
@@ -154,6 +173,11 @@ static int tlc5940_probe(struct spi_device *const spi)
 		return -ENOMEM;
 
 	spi->bits_per_word = TLC5940_BITS_PER_WORD;
+
+	transfer->tx_buf = fb;
+	transfer->rx_buf = NULL;
+	transfer->len = TLC5940_MAX_LEDS * sizeof(u16);
+	transfer->tx_nbits = 12;
 
 	ret = of_get_named_gpio(np, "blank-gpio", 0);
 	if (ret < 0) {
