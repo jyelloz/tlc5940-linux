@@ -62,7 +62,7 @@ static inline struct tlc5940*
 tlc5940_led_get_tlc5940 (struct tlc5940_led *const led)
 {
 	/* the first element of leds array */
-    struct tlc5940_led *const leds = (
+	struct tlc5940_led *const leds = (
 	  led - (led->id * sizeof(struct tlc5940_led))
 	);
 	return container_of(leds, struct tlc5940, leds[0]);
