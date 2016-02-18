@@ -20,6 +20,9 @@
 #include <linux/workqueue.h>
 #include <linux/spi/spi.h>
 #include <linux/gpio.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_gpio.h>
 #include <linux/pwm.h>
 
 #include "tlc5940-timing.h"
@@ -108,6 +111,12 @@ static int tlc5940_probe(struct spi_device *const spi)
 		return -ENOMEM;
 
 	spi->bits_per_word = TLC5940_BITS_PER_WORD;
+	ret = of_get_named_gpio(np, "blank-gpio", 0);
+	if (ret < 0) {
+		dev_err(dev, "failed to read property `blank-gpio': %d\n", ret);
+		return ret;
+	}
+	tlc->gpio_blank = ret;
 	ret = devm_gpio_request(dev, tlc->gpio_blank, "TLC5940 BLANK");
 	if (ret) {
 		dev_err(dev, "Failed to request BLANK pin:%d\n", ret);
@@ -159,32 +168,26 @@ static int tlc5940_remove(struct spi_device *const spi)
 	return 0;
 }
 
+static const struct of_device_id tlc5940_dt_ids[] = {
+	{
+		.compatible = "linux,tlc5940",
+	},
+	{ /* sentinel */ }
+};
+
+MODULE_DEVICE_TABLE(of, tlc5940_dt_ids);
+
 static struct spi_driver tlc5940_driver = {
-	.probe		= tlc5940_probe,
-	.remove		= tlc5940_remove,
+	.probe = tlc5940_probe,
+	.remove = tlc5940_remove,
 	.driver = {
-		.name	= "tlc5940",
-		.owner	= THIS_MODULE,
+		.name = "tlc5940",
+		.owner = THIS_MODULE,
+		.of_match_table = tlc5940_dt_ids,
 	},
 };
 
-static int tlc5940_register_driver (struct spi_driver *const sdrv)
-{
-    int ret = spi_register_driver(sdrv);
-	return ret;
-}
-
-static inline void tlc5940_unregister_driver(struct spi_driver *sdrv)
-{
-	spi_unregister_driver (sdrv);
-}
-
-module_driver(
-  tlc5940_driver,
-  tlc5940_register_driver,
-  tlc5940_unregister_driver
-);
-/* module_spi_driver(tlc5940_driver); */
+module_spi_driver(tlc5940_driver);
 
 MODULE_AUTHOR("Jordan Yelloz <jordan@yelloz.me");
 MODULE_DESCRIPTION("TLC5940 LED driver");
