@@ -83,6 +83,8 @@ tlc5940_timer_func(struct hrtimer *const timer)
 	struct device *const dev = &tlc->spi->dev;
     const int gpio_blank = tlc->gpio_blank;
 
+	hrtimer_forward_now(timer, ktime_set(0, BLANK_PERIOD_NS));
+
 	if (!gpio_is_valid(gpio_blank)) {
 		dev_err(dev, "invalid gpio %d, expiring timer\n", gpio_blank);
 		return HRTIMER_NORESTART;
@@ -91,7 +93,6 @@ tlc5940_timer_func(struct hrtimer *const timer)
 	gpio_set_value(gpio_blank, 1);
 	gpio_set_value(gpio_blank, 0);
 
-	hrtimer_forward_now(timer, ktime_set(0, BLANK_PERIOD_NS));
 
     return HRTIMER_RESTART;
 
