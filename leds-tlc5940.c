@@ -75,6 +75,28 @@ set_new_gs_data(struct tlc5940_led *const led, const bool value)
 	tlc->new_gs_data = value;
 }
 
+static enum hrtimer_restart
+tlc5940_timer_func(struct hrtimer *const timer)
+{
+
+	struct tlc5940 *const tlc = container_of(timer, struct tlc5940, timer);
+	struct device *const dev = &tlc->spi->dev;
+    const int gpio_blank = tlc->gpio_blank;
+
+	if (!gpio_is_valid(gpio_blank)) {
+		dev_err(dev, "invalid gpio %d, expiring timer\n", gpio_blank);
+		return HRTIMER_NORESTART;
+	}
+
+	gpio_set_value(gpio_blank, 1);
+	gpio_set_value(gpio_blank, 0);
+
+	hrtimer_forward_now(timer, ktime_set(0, BLANK_PERIOD_NS));
+
+    return HRTIMER_RESTART;
+
+}
+
 static void
 tlc5940_led_work(struct work_struct *work)
 {
