@@ -83,6 +83,7 @@ static void
 tlc5940_set_brightness(struct led_classdev *const ldev,
 					   const enum led_brightness brightness)
 {
+
 	struct tlc5940_led *const led = container_of(
 	  ldev,
 	  struct tlc5940_led,
@@ -99,16 +100,21 @@ tlc5940_set_brightness(struct led_classdev *const ldev,
 		schedule_work(&led->work);
 	}
 	spin_unlock(&led->lock);
+
 }
 
 static int tlc5940_probe(struct spi_device *const spi)
 {
 	struct device *const dev = &(spi->dev);
-	struct tlc5940 *tlc;
+	struct device_node *const np = dev->of_node;
+	struct tlc5940 *const tlc = devm_kzalloc(
+	  &spi->dev,
+	  sizeof(struct tlc5940),
+	  GFP_KERNEL
+	);
 	struct tlc5940_led *led;
 	int i, ret;
 
-	tlc = devm_kzalloc(&spi->dev, sizeof(*tlc), GFP_KERNEL);
 	if (!tlc)
 		return -ENOMEM;
 
