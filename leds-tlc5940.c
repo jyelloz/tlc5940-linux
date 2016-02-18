@@ -47,13 +47,15 @@ struct tlc5940_led {
 };
 
 struct tlc5940 {
-	struct tlc5940_led leds[TLC5940_MAX_LEDS];
-	u16                fb[TLC5940_MAX_LEDS];
-	bool               new_gs_data;
-	int                gpio_blank;
-	struct hrtimer     timer;
-	struct spi_device *spi;
-	struct pwm_device *pwm;
+	struct tlc5940_led  leds[TLC5940_MAX_LEDS];
+	u16                 fb[TLC5940_MAX_LEDS];
+	bool                new_gs_data;
+	int                 gpio_blank;
+	struct hrtimer      timer;
+	struct spi_device  *spi;
+	struct pwm_device  *pwm;
+
+	struct spi_transfer transfer;
 
 	struct mutex       mutex;
 };
