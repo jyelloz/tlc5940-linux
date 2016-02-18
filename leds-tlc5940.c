@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
+#include <linux/hrtimer.h>
 #include <linux/spi/spi.h>
 #include <linux/gpio.h>
 #include <linux/of.h>
@@ -33,13 +34,8 @@
 #define TLC5940_BITS_PER_WORD 12
 #define TLC5940_MAX_SPEED_HZ ((u32) (1e6))
 
-#define TLC5940_LED_DRVDATA(_led) ( \
-							  (struct tlc5940 *) spi_get_drvdata(_led->spi) )
-
 struct tlc5940_led {
 	struct led_classdev ldev;
-	struct spi_device  *spi;
-	struct pwm_device  *pwm;
 	int                 id;
 	int                 brightness;
 	char                name[sizeof("tlc5940-00")];
@@ -55,15 +51,28 @@ struct tlc5940 {
 	u16                fb[TLC5940_MAX_LEDS];
 	bool               new_gs_data;
 	int                gpio_blank;
+	struct hrtimer     timer;
+	struct spi_device *spi;
 	struct pwm_device *pwm;
 
 	struct mutex       mutex;
 };
 
+static inline struct tlc5940*
+tlc5940_led_get_tlc5940 (struct tlc5940_led *const led)
+{
+	/* the first element of leds array */
+    struct tlc5940_led *const leds = (
+	  led - (led->id * sizeof(struct tlc5940_led))
+	);
+	return container_of(leds, struct tlc5940, leds[0]);
+}
+
 static void
 set_new_gs_data(struct tlc5940_led *const led, const bool value)
 {
-	TLC5940_LED_DRVDATA(led)->new_gs_data = value;
+	struct tlc5940 *const tlc = tlc5940_led_get_tlc5940(led);
+	tlc->new_gs_data = value;
 }
 
 static void
@@ -131,13 +140,14 @@ static int tlc5940_probe(struct spi_device *const spi)
 		return ret;
 	}
 
+	tlc->spi = spi;
+
 	mutex_init(&tlc->mutex);
 
-	for (i = 0; i < ARRAY_SIZE(tlc->leds); i++) {
-		led		= tlc->leds + i;
-		led->id		= i;
-		led->brightness	= LED_OFF;
-		led->spi	= spi;
+	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
+		led = tlc->leds + i;
+		led->id = i;
+		led->brightness = LED_OFF;
 		led->fb = tlc->fb;
 		led->mutex = &tlc->mutex;
 		snprintf(led->name, sizeof(led->name), "tlc5940-%d", i);
