@@ -143,6 +143,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 	  sizeof(struct tlc5940),
 	  GFP_KERNEL
 	);
+	struct hrtimer *const timer = &tlc->timer;
 	struct tlc5940_led *led;
 	int i, ret;
 
@@ -161,6 +162,10 @@ static int tlc5940_probe(struct spi_device *const spi)
 		dev_err(dev, "Failed to request BLANK pin:%d\n", ret);
 		return ret;
 	}
+
+	hrtimer_init(timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	timer->function = tlc5940_timer_func;
+	hrtimer_start(timer, ktime_set(1, 0), HRTIMER_MODE_REL);
 
 	tlc->spi = spi;
 
