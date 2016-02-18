@@ -81,7 +81,7 @@ tlc5940_timer_func(struct hrtimer *const timer)
 
 	struct tlc5940 *const tlc = container_of(timer, struct tlc5940, timer);
 	struct device *const dev = &tlc->spi->dev;
-    const int gpio_blank = tlc->gpio_blank;
+	const int gpio_blank = tlc->gpio_blank;
 
 	hrtimer_forward_now(timer, ktime_set(0, BLANK_PERIOD_NS));
 
@@ -94,7 +94,7 @@ tlc5940_timer_func(struct hrtimer *const timer)
 	gpio_set_value(gpio_blank, 0);
 
 
-    return HRTIMER_RESTART;
+	return HRTIMER_RESTART;
 
 }
 
