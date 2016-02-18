@@ -206,11 +206,13 @@ static int
 tlc5940_remove(struct spi_device *const spi)
 {
 	struct tlc5940 *const tlc = spi_get_drvdata(spi);
+	struct tlc5940_led *led;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(tlc->leds); i++) {
-		led_classdev_unregister(&tlc->leds[i].ldev);
-		cancel_work_sync(&tlc->leds[i].work);
+	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
+		led = &tlc->leds[i];
+		led_classdev_unregister(&led->ldev);
+		cancel_work_sync(&led->work);
 	}
 
 	return 0;
