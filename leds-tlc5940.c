@@ -105,7 +105,7 @@ tlc5940_led_work(struct work_struct *work)
 
 	mutex_lock(led->mutex);
 
-	set_new_gs_data (led, 1);
+	set_new_gs_data(led, 1);
 
 	mutex_unlock(led->mutex);
 
@@ -152,6 +152,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 		return -ENOMEM;
 
 	spi->bits_per_word = TLC5940_BITS_PER_WORD;
+
 	ret = of_get_named_gpio(np, "blank-gpio", 0);
 	if (ret < 0) {
 		dev_err(dev, "failed to read property `blank-gpio': %d\n", ret);
