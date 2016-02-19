@@ -54,7 +54,7 @@ struct tlc5940_led {
 	struct led_classdev ldev;
 	int                 id;
 	int                 brightness;
-	char                name[sizeof("tlc5940-00")];
+	const char         *name;
 	struct tlc5940     *tlc;
 
 	spinlock_t          lock;
@@ -185,6 +185,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 	struct work_struct *const work = &tlc->work;
 	struct pwm_device *pwm;
 	struct tlc5940_led *led;
+	struct device_node *child;
 	int i, ret;
 
 	if (!tlc) {
@@ -242,12 +243,13 @@ static int tlc5940_probe(struct spi_device *const spi)
 	tlc->spi = spi;
 	tlc->pwm = pwm;
 
-	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
-		led = tlc->leds + i;
+	i = 0;
+	for_each_child_of_node(np, child) {
+		led = &(tlc->leds[i]);
+		led->name = of_get_property(child, "label", NULL) ? : child->name;
 		led->id = i;
 		led->tlc = tlc;
 		led->brightness = LED_OFF;
-		snprintf(led->name, sizeof(led->name), "tlc5940-%d", i);
 		spin_lock_init(&led->lock);
 		led->ldev.name = led->name;
 		led->ldev.brightness = LED_OFF;
@@ -256,6 +258,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 		ret = led_classdev_register(dev, &led->ldev);
 		if (ret < 0)
 			goto eledcr;
+		i++;
 	}
 
 	spi_set_drvdata(spi, tlc);
@@ -263,6 +266,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 	return 0;
 
 eledcr:
+	dev_err(dev, "failed to set up child LED #%d: %d\n", i, ret);
 	while (i--)
 		led_classdev_unregister(&tlc->leds[i].ldev);
 
