@@ -222,7 +222,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 		return ret;
 	}
 
-	pwm = devm_of_pwm_get(dev, np, "gsclk");
+	pwm = devm_of_pwm_get(dev, np, NULL);
 	if (IS_ERR(pwm)) {
 		ret = PTR_ERR(pwm);
 		dev_err(dev, "failed to get GSCLK PWM pin: %d\n", ret);
