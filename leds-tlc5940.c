@@ -26,7 +26,10 @@
 #include <linux/of_gpio.h>
 #include <linux/pwm.h>
 
-#include "tlc5940-timing.h"
+#define TLC5940_GSCLK_SPEED_HZ  2500000
+#define TLC5940_GSCLK_PERIOD_NS ((unsigned long) (1e9 / TLC5940_GSCLK_SPEED_HZ))
+#define TLC5940_GSCLK_DUTY_CYCLE_NS (TLC5940_GSCLK_PERIOD_NS / 2)
+#define TLC5940_BLANK_PERIOD_NS (4096 * TLC5940_GSCLK_PERIOD_NS)
 
 #define TLC5940_MAX_LEDS   16
 #define TLC5940_GS_CHANNEL_WIDTH 12
@@ -89,7 +92,7 @@ tlc5940_timer_func(struct hrtimer *const timer)
 	struct device *const dev = &spi->dev;
 	const int gpio_blank = tlc->gpio_blank;
 
-	hrtimer_forward_now(timer, ktime_set(0, BLANK_PERIOD_NS));
+	hrtimer_forward_now(timer, ktime_set(0, TLC5940_BLANK_PERIOD_NS));
 
 	if (!gpio_is_valid(gpio_blank)) {
 		dev_err(dev, "invalid gpio %d, expiring timer\n", gpio_blank);
