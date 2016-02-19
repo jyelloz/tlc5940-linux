@@ -149,7 +149,7 @@ tlc5940_work(struct work_struct *const work)
 	ret = spi_write(spi, fb, TLC5940_FB_SIZE);
 
 	if (ret) {
-		dev_err(dev, "spi transfer error: %d, expiring timer\n", ret);
+		dev_err(dev, "spi transfer error: %d\n", ret);
 		return;
 	}
 
@@ -212,7 +212,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 		dev_err(dev, "failed to request BLANK pin: %d\n", ret);
 		return ret;
 	}
-	/* this can be HIGH initially to avoid an initial flicker */
+	/* this can be HIGH initially to avoid any startup flicker */
 	ret = gpio_direction_output(tlc->gpio_blank, 1);
 	if (ret) {
 		dev_err(dev, "failed to configure BLANK pin for output: %d\n", ret);
