@@ -6,10 +6,10 @@
  *  - leds-dac124s085.c by Guennadi Liakhovetski <lg@denx.de>
  *
  * This file is subject to the terms and conditions of version 2 of
- * the GNU General Public License.  See the file COPYING in the main
+ * the GNU General Public License. See the file LICENSE in the main
  * directory of this archive for more details.
  *
- * LED driver for the TLC5940 SPI
+ * LED driver for the TLC5940 SPI LED Controller
  */
 
 #include <linux/leds.h>
