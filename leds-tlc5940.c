@@ -260,7 +260,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 		led->ldev.brightness = LED_OFF;
 		led->ldev.max_brightness = 0xfff;
 		led->ldev.brightness_set = tlc5940_set_brightness;
-		ret = led_classdev_register(&spi->dev, &led->ldev);
+		ret = led_classdev_register(dev, &led->ldev);
 		if (ret < 0)
 			goto eledcr;
 	}
