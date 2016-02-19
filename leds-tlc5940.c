@@ -14,7 +14,6 @@
 
 #include <linux/leds.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
@@ -58,7 +57,6 @@ struct tlc5940_led {
 	char                name[sizeof("tlc5940-00")];
 	u8                 *fb;
 
-	struct mutex       *mutex;
 	spinlock_t          lock;
 };
 
@@ -74,7 +72,6 @@ struct tlc5940 {
 	struct spi_device  *spi;
 	struct pwm_device  *pwm;
 
-	struct mutex       mutex;
 };
 
 static inline struct tlc5940*
@@ -252,14 +249,11 @@ static int tlc5940_probe(struct spi_device *const spi)
 	tlc->spi = spi;
 	tlc->pwm = pwm;
 
-	mutex_init(&tlc->mutex);
-
 	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
 		led = tlc->leds + i;
 		led->id = i;
 		led->brightness = LED_OFF;
 		led->fb = tlc->fb;
-		led->mutex = &tlc->mutex;
 		snprintf(led->name, sizeof(led->name), "tlc5940-%d", i);
 		spin_lock_init(&led->lock);
 		led->ldev.name = led->name;
