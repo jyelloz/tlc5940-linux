@@ -29,9 +29,9 @@
 #include "tlc5940-timing.h"
 
 #define TLC5940_MAX_LEDS   16
-#define TLC5940_GS_CHANNEL_WIDTH 12
+#define TLC5940_TXBUF_LEN ((TLC5940_MAX_LEDS * sizeof(u16)))
 
-#define TLC5940_BITS_PER_WORD 12
+#define TLC5940_BITS_PER_WORD 8
 #define TLC5940_MAX_SPEED_HZ ((u32) (1e6))
 
 struct tlc5940_led {
@@ -101,13 +101,21 @@ tlc5940_work(struct work_struct *const work)
 	struct spi_device *const spi = tlc->spi;
 	struct device *const dev = &spi->dev;
 	u16 *const fb = &(tlc->fb[0]);
+	u16 word;
 	int ret;
+	int i;
 
-	ret = spi_write(spi, (const u8 *) &fb, TLC5940_MAX_LEDS * sizeof(u16));
+	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
 
-	if (ret) {
-		dev_err(dev, "spi transfer error: %d, expiring timer\n", ret);
-		return;
+		word = fb[TLC5940_MAX_LEDS - 1 - i];
+
+		ret = spi_write(spi, &word, sizeof(u16));
+
+		if (ret) {
+			dev_err(dev, "spi transfer error: %d, expiring timer\n", ret);
+			return;
+		}
+
 	}
 
 	tlc->new_gs_data = 0;
