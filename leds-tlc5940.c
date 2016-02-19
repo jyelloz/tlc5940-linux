@@ -42,7 +42,6 @@ struct tlc5940_led {
 	u16                *fb;
 
 	struct mutex       *mutex;
-	struct work_struct  work;
 	spinlock_t          lock;
 };
 
@@ -50,12 +49,13 @@ struct tlc5940 {
 	struct tlc5940_led  leds[TLC5940_MAX_LEDS];
 	u16                 fb[TLC5940_MAX_LEDS];
 	bool                new_gs_data;
+
 	int                 gpio_blank;
 	struct hrtimer      timer;
+
+	struct work_struct  work;
 	struct spi_device  *spi;
 	struct pwm_device  *pwm;
-
-	struct spi_transfer transfer;
 
 	struct mutex       mutex;
 };
@@ -63,18 +63,7 @@ struct tlc5940 {
 static inline struct tlc5940*
 tlc5940_led_get_tlc5940 (struct tlc5940_led *const led)
 {
-	/* the first element of leds array */
-	struct tlc5940_led *const leds = (
-	  led - (led->id * sizeof(struct tlc5940_led))
-	);
-	return container_of(leds, struct tlc5940, leds[0]);
-}
-
-static void
-set_new_gs_data(struct tlc5940_led *const led, const bool value)
-{
-	struct tlc5940 *const tlc = tlc5940_led_get_tlc5940(led);
-	tlc->new_gs_data = value;
+	return container_of(led->fb, struct tlc5940, fb[0]);
 }
 
 static enum hrtimer_restart
@@ -82,11 +71,9 @@ tlc5940_timer_func(struct hrtimer *const timer)
 {
 
 	struct tlc5940 *const tlc = container_of(timer, struct tlc5940, timer);
-	struct device *const dev = &tlc->spi->dev;
-	struct spi_transfer *const transfer = &tlc->transfer;
-	u16 *const fb = &(tlc->fb[0]);
+	struct spi_device *const spi = tlc->spi;
+	struct device *const dev = &spi->dev;
 	const int gpio_blank = tlc->gpio_blank;
-	int ret;
 
 	hrtimer_forward_now(timer, ktime_set(0, BLANK_PERIOD_NS));
 
@@ -99,19 +86,7 @@ tlc5940_timer_func(struct hrtimer *const timer)
 	gpio_set_value(gpio_blank, 0);
 
 	if (tlc->new_gs_data) {
-
-		ret = spi_sync(
-		  spi,
-		  transfer
-		);
-
-		if (ret) {
-			dev_err(dev, "spi transfer error: %d, expiring timer\n", ret);
-			return HRTIMER_NORESTART;
-		}
-
-		tlc->new_gs_data = 0;
-
+		schedule_work(&tlc->work);
 	}
 
 	return HRTIMER_RESTART;
@@ -119,15 +94,23 @@ tlc5940_timer_func(struct hrtimer *const timer)
 }
 
 static void
-tlc5940_led_work(struct work_struct *work)
+tlc5940_work(struct work_struct *const work)
 {
-	struct tlc5940_led *led = container_of(work, struct tlc5940_led, work);
 
-	mutex_lock(led->mutex);
+	struct tlc5940 *const tlc = container_of(work, struct tlc5940, work);
+	struct spi_device *const spi = tlc->spi;
+	struct device *const dev = &spi->dev;
+	u16 *const fb = &(tlc->fb[0]);
+	int ret;
 
-	set_new_gs_data(led, 1);
+	ret = spi_write(spi, (const u8 *) &fb, TLC5940_MAX_LEDS * sizeof(u16));
 
-	mutex_unlock(led->mutex);
+	if (ret) {
+		dev_err(dev, "spi transfer error: %d, expiring timer\n", ret);
+		return;
+	}
+
+	tlc->new_gs_data = 0;
 
 }
 
@@ -141,15 +124,15 @@ tlc5940_set_brightness(struct led_classdev *const ldev,
 	  struct tlc5940_led,
 	  ldev
 	);
-
-	u16 *const fb = led->fb;
+	struct tlc5940 *const tlc = tlc5940_led_get_tlc5940(led);
 	const int id = led->id;
-	const u16 scaled_brightness = clamp(((u16) brightness) << 4, 0x000, 0xfff);
+
+	tlc->new_gs_data = 1;
 
 	spin_lock(&led->lock);
 	{
-		fb[id] = scaled_brightness;
-		schedule_work(&led->work);
+		led->brightness = brightness;
+		tlc->fb[id] = cpu_to_be16(brightness & 0xfff);
 	}
 	spin_unlock(&led->lock);
 
@@ -165,7 +148,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 	  GFP_KERNEL
 	);
 	struct hrtimer *const timer = &tlc->timer;
-	struct spi_transfer *const transfer = &tlc->transfer;
+	struct work_struct *const work = &tlc->work;
 	struct tlc5940_led *led;
 	int i, ret;
 
@@ -173,11 +156,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 		return -ENOMEM;
 
 	spi->bits_per_word = TLC5940_BITS_PER_WORD;
-
-	transfer->tx_buf = fb;
-	transfer->rx_buf = NULL;
-	transfer->len = TLC5940_MAX_LEDS * sizeof(u16);
-	transfer->tx_nbits = 12;
+	spi->max_speed_hz = TLC5940_MAX_SPEED_HZ;
 
 	ret = of_get_named_gpio(np, "blank-gpio", 0);
 	if (ret < 0) {
@@ -197,6 +176,9 @@ static int tlc5940_probe(struct spi_device *const spi)
 	timer->function = tlc5940_timer_func;
 	hrtimer_start(timer, ktime_set(1, 0), HRTIMER_MODE_REL);
 
+	INIT_WORK(work, tlc5940_work);
+
+	tlc->new_gs_data = 1;
 	tlc->spi = spi;
 
 	mutex_init(&tlc->mutex);
@@ -209,7 +191,6 @@ static int tlc5940_probe(struct spi_device *const spi)
 		led->mutex = &tlc->mutex;
 		snprintf(led->name, sizeof(led->name), "tlc5940-%d", i);
 		spin_lock_init(&led->lock);
-		INIT_WORK(&led->work, tlc5940_led_work);
 		led->ldev.name = led->name;
 		led->ldev.brightness = LED_OFF;
 		led->ldev.max_brightness = 0xfff;
@@ -235,15 +216,16 @@ tlc5940_remove(struct spi_device *const spi)
 {
 	struct tlc5940 *const tlc = spi_get_drvdata(spi);
 	struct hrtimer *const timer = &tlc->timer;
+	struct work_struct *const work = &tlc->work;
 	struct tlc5940_led *led;
 	int i;
 
 	hrtimer_cancel(timer);
+	cancel_work_sync(work);
 
 	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
 		led = &tlc->leds[i];
 		led_classdev_unregister(&led->ldev);
-		cancel_work_sync(&led->work);
 	}
 
 	return 0;
