@@ -313,4 +313,3 @@ module_spi_driver(tlc5940_driver);
 MODULE_AUTHOR("Jordan Yelloz <jordan@yelloz.me");
 MODULE_DESCRIPTION("TLC5940 LED driver");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("spi:tlc5940");
