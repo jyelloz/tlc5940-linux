@@ -29,17 +29,31 @@
 #include "tlc5940-timing.h"
 
 #define TLC5940_MAX_LEDS   16
-#define TLC5940_TXBUF_LEN ((TLC5940_MAX_LEDS * sizeof(u16)))
+#define TLC5940_GS_CHANNEL_WIDTH 12
 
 #define TLC5940_BITS_PER_WORD 8
 #define TLC5940_MAX_SPEED_HZ ((u32) (1e6))
+
+#define TLC5940_FB_SIZE_BITS ((TLC5940_MAX_LEDS) * TLC5940_GS_CHANNEL_WIDTH)
+#define TLC5940_FB_SIZE (TLC5940_FB_SIZE_BITS >> 3)
+
+#define GS_DUO(a, b)			((a) >> 4), ((a) << 4) | ((b) >> 8), (b)
+#define DC_QUARTET(a, b, c, d)	((a) << 2) | ((b) >> 4), \
+								((b) << 4) | ((c) >> 2), \
+								((c) << 6) | (d)
+
+#define FB_OFFSET_BITS(__led)   ( \
+								  (TLC5940_FB_SIZE_BITS) - \
+								  (TLC5940_GS_CHANNEL_WIDTH * ((__led) + 1)) \
+								)
+#define FB_OFFSET(__led)        (FB_OFFSET_BITS(__led) >> 3)
 
 struct tlc5940_led {
 	struct led_classdev ldev;
 	int                 id;
 	int                 brightness;
 	char                name[sizeof("tlc5940-00")];
-	u16                *fb;
+	u8                 *fb;
 
 	struct mutex       *mutex;
 	spinlock_t          lock;
@@ -47,7 +61,7 @@ struct tlc5940_led {
 
 struct tlc5940 {
 	struct tlc5940_led  leds[TLC5940_MAX_LEDS];
-	u16                 fb[TLC5940_MAX_LEDS];
+	u8                  fb[TLC5940_FB_SIZE];
 	bool                new_gs_data;
 
 	int                 gpio_blank;
@@ -94,28 +108,49 @@ tlc5940_timer_func(struct hrtimer *const timer)
 }
 
 static void
+tlc5940_update_fb(struct tlc5940 *const tlc)
+{
+
+	u8 *const fb = &(tlc->fb[0]);
+	int id;
+
+	for (id = 0; id < TLC5940_MAX_LEDS; id++) {
+
+		struct tlc5940_led *const led = &(tlc->leds[id]);
+
+		const u16 brightness = led->brightness & 0xfff;
+		const u8 offset = FB_OFFSET(id);
+		const u8 mid_byte = id % 2 == 0;
+
+		if (mid_byte) {
+			fb[offset] = (fb[offset] & 0xf0) | brightness >> 8;
+			fb[offset + 1] = brightness & 0xff;
+		} else {
+			fb[offset] = brightness >> 4;
+			fb[offset + 1] = (fb[offset + 1] & 0x0f) | ((brightness << 4 & 0xf0));
+		}
+
+	}
+
+}
+
+static void
 tlc5940_work(struct work_struct *const work)
 {
 
 	struct tlc5940 *const tlc = container_of(work, struct tlc5940, work);
 	struct spi_device *const spi = tlc->spi;
 	struct device *const dev = &spi->dev;
-	u16 *const fb = &(tlc->fb[0]);
-	u16 word;
+	u8 *const fb = &(tlc->fb[0]);
 	int ret;
-	int i;
 
-	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
+	tlc5940_update_fb(tlc);
 
-		word = fb[TLC5940_MAX_LEDS - 1 - i];
+	ret = spi_write(spi, fb, TLC5940_FB_SIZE);
 
-		ret = spi_write(spi, &word, sizeof(u16));
-
-		if (ret) {
-			dev_err(dev, "spi transfer error: %d, expiring timer\n", ret);
-			return;
-		}
-
+	if (ret) {
+		dev_err(dev, "spi transfer error: %d, expiring timer\n", ret);
+		return;
 	}
 
 	tlc->new_gs_data = 0;
@@ -133,14 +168,12 @@ tlc5940_set_brightness(struct led_classdev *const ldev,
 	  ldev
 	);
 	struct tlc5940 *const tlc = tlc5940_led_get_tlc5940(led);
-	const int id = led->id;
 
 	tlc->new_gs_data = 1;
 
 	spin_lock(&led->lock);
 	{
 		led->brightness = brightness;
-		tlc->fb[id] = cpu_to_be16(brightness & 0xfff);
 	}
 	spin_unlock(&led->lock);
 
