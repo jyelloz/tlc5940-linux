@@ -55,7 +55,7 @@ struct tlc5940_led {
 	int                 id;
 	int                 brightness;
 	char                name[sizeof("tlc5940-00")];
-	u8                 *fb;
+	struct tlc5940     *tlc;
 
 	spinlock_t          lock;
 };
@@ -77,7 +77,7 @@ struct tlc5940 {
 static inline struct tlc5940*
 tlc5940_led_get_tlc5940 (struct tlc5940_led *const led)
 {
-	return container_of(led->fb, struct tlc5940, fb[0]);
+	return led->tlc;
 }
 
 static enum hrtimer_restart
@@ -252,8 +252,8 @@ static int tlc5940_probe(struct spi_device *const spi)
 	for (i = 0; i < TLC5940_MAX_LEDS; i++) {
 		led = tlc->leds + i;
 		led->id = i;
+		led->tlc = tlc;
 		led->brightness = LED_OFF;
-		led->fb = tlc->fb;
 		snprintf(led->name, sizeof(led->name), "tlc5940-%d", i);
 		spin_lock_init(&led->lock);
 		led->ldev.name = led->name;
