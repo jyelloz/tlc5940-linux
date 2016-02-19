@@ -232,6 +232,8 @@ static int tlc5940_probe(struct spi_device *const spi)
 		return ret;
 	}
 
+	pwm_enable(pwm);
+
 	hrtimer_init(timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	timer->function = tlc5940_timer_func;
 	hrtimer_start(timer, ktime_set(1, 0), HRTIMER_MODE_REL);
@@ -279,9 +281,11 @@ tlc5940_remove(struct spi_device *const spi)
 	struct tlc5940 *const tlc = spi_get_drvdata(spi);
 	struct hrtimer *const timer = &tlc->timer;
 	struct work_struct *const work = &tlc->work;
+	struct pwm_device *const pwm = tlc->pwm;
 	struct tlc5940_led *led;
 	int i;
 
+	pwm_disable(pwm);
 	hrtimer_cancel(timer);
 	cancel_work_sync(work);
 
