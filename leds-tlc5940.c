@@ -74,12 +74,6 @@ struct tlc5940 {
 
 };
 
-static inline struct tlc5940*
-tlc5940_led_get_tlc5940 (struct tlc5940_led *const led)
-{
-	return led->tlc;
-}
-
 static enum hrtimer_restart
 tlc5940_timer_func(struct hrtimer *const timer)
 {
@@ -167,9 +161,8 @@ tlc5940_set_brightness(struct led_classdev *const ldev,
 	  struct tlc5940_led,
 	  ldev
 	);
-	struct tlc5940 *const tlc = tlc5940_led_get_tlc5940(led);
 
-	tlc->new_gs_data = 1;
+	led->tlc->new_gs_data = 1;
 
 	spin_lock(&led->lock);
 	{
