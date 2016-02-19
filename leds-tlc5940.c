@@ -193,6 +193,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 	);
 	struct hrtimer *const timer = &tlc->timer;
 	struct work_struct *const work = &tlc->work;
+	struct pwm_device *pwm;
 	struct tlc5940_led *led;
 	int i, ret;
 
@@ -217,6 +218,25 @@ static int tlc5940_probe(struct spi_device *const spi)
 	/* this can be HIGH initially to avoid an initial flicker */
 	gpio_direction_output(tlc->gpio_blank, 1);
 
+	pwm = devm_of_pwm_get(dev, np, "gsclk");
+	if (IS_ERR(pwm)) {
+		ret = PTR_ERR(pwm);
+		dev_err(dev, "failed to get GSCLK PWM pin: %d\n", ret);
+		return ret;
+	}
+
+	ret = pwm_config(pwm, TLC5940_GSCLK_DUTY_CYCLE_NS, TLC5940_GSCLK_PERIOD_NS);
+	if (ret) {
+		dev_err(
+		  dev,
+		  "failed to configure pwm with period %ld, duty cycle %ld: %d\n",
+		  TLC5940_GSCLK_PERIOD_NS,
+		  TLC5940_GSCLK_DUTY_CYCLE_NS,
+		  ret
+		);
+		return ret;
+	}
+
 	hrtimer_init(timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	timer->function = tlc5940_timer_func;
 	hrtimer_start(timer, ktime_set(1, 0), HRTIMER_MODE_REL);
@@ -224,7 +244,9 @@ static int tlc5940_probe(struct spi_device *const spi)
 	INIT_WORK(work, tlc5940_work);
 
 	tlc->new_gs_data = 1;
+
 	tlc->spi = spi;
+	tlc->pwm = pwm;
 
 	mutex_init(&tlc->mutex);
 
