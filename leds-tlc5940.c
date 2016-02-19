@@ -193,8 +193,9 @@ static int tlc5940_probe(struct spi_device *const spi)
 	struct tlc5940_led *led;
 	int i, ret;
 
-	if (!tlc)
+	if (!tlc) {
 		return -ENOMEM;
+	}
 
 	spi->bits_per_word = TLC5940_BITS_PER_WORD;
 	spi->max_speed_hz = TLC5940_MAX_SPEED_HZ;
