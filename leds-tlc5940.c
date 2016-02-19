@@ -212,11 +212,15 @@ static int tlc5940_probe(struct spi_device *const spi)
 	tlc->gpio_blank = ret;
 	ret = devm_gpio_request(dev, tlc->gpio_blank, "TLC5940 BLANK");
 	if (ret) {
-		dev_err(dev, "Failed to request BLANK pin:%d\n", ret);
+		dev_err(dev, "failed to request BLANK pin: %d\n", ret);
 		return ret;
 	}
 	/* this can be HIGH initially to avoid an initial flicker */
-	gpio_direction_output(tlc->gpio_blank, 1);
+	ret = gpio_direction_output(tlc->gpio_blank, 1);
+	if (ret) {
+		dev_err(dev, "failed to configure BLANK pin for output: %d\n", ret);
+		return ret;
+	}
 
 	pwm = devm_of_pwm_get(dev, np, "gsclk");
 	if (IS_ERR(pwm)) {
