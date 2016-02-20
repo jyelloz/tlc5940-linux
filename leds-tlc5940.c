@@ -25,6 +25,8 @@
 #include <linux/of_gpio.h>
 #include <linux/pwm.h>
 
+#define DRIVER_NAME "leds-tlc5940"
+
 #define TLC5940_GSCLK_SPEED_HZ  2500000
 #define TLC5940_GSCLK_PERIOD_NS ((unsigned long) (1e9 / TLC5940_GSCLK_SPEED_HZ))
 #define TLC5940_GSCLK_DUTY_CYCLE_NS (TLC5940_GSCLK_PERIOD_NS / 2)
@@ -310,9 +312,8 @@ static struct spi_driver tlc5940_driver = {
 	.probe = tlc5940_probe,
 	.remove = tlc5940_remove,
 	.driver = {
-		.name = "tlc5940",
-		.owner = THIS_MODULE,
-		.of_match_table = tlc5940_dt_ids,
+		.name = DRIVER_NAME,
+		.of_match_table = of_match_ptr(tlc5940_dt_ids),
 	},
 };
 
@@ -321,4 +322,4 @@ module_spi_driver(tlc5940_driver);
 MODULE_AUTHOR("Jordan Yelloz <jordan@yelloz.me");
 MODULE_DESCRIPTION("TLC5940 LED driver");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("spi:tlc5940");
+MODULE_ALIAS("spi:" DRIVER_NAME);
