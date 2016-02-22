@@ -41,11 +41,6 @@
 #define TLC5940_FB_SIZE_BITS ((TLC5940_MAX_LEDS) * TLC5940_GS_CHANNEL_WIDTH)
 #define TLC5940_FB_SIZE (TLC5940_FB_SIZE_BITS >> 3)
 
-#define GS_DUO(a, b)			((a) >> 4), ((a) << 4) | ((b) >> 8), (b)
-#define DC_QUARTET(a, b, c, d)	((a) << 2) | ((b) >> 4), \
-								((b) << 4) | ((c) >> 2), \
-								((c) << 6) | (d)
-
 #define FB_OFFSET_BITS(__led)   ( \
 								  (TLC5940_FB_SIZE_BITS) - \
 								  (TLC5940_GS_CHANNEL_WIDTH * ((__led) + 1)) \
