@@ -28,7 +28,7 @@
 #define DRIVER_NAME "leds-tlc5940"
 
 #define TLC5940_GSCLK_SPEED_HZ  250000
-#define TLC5940_GSCLK_PERIOD_NS ((unsigned long) (1e9 / TLC5940_GSCLK_SPEED_HZ))
+#define TLC5940_GSCLK_PERIOD_NS (1000000000 / TLC5940_GSCLK_SPEED_HZ)
 #define TLC5940_GSCLK_DUTY_CYCLE_NS (TLC5940_GSCLK_PERIOD_NS / 2)
 #define TLC5940_BLANK_PERIOD_NS (4096 * TLC5940_GSCLK_PERIOD_NS)
 
@@ -221,7 +221,7 @@ static int tlc5940_probe(struct spi_device *const spi)
 	if (ret) {
 		dev_err(
 		  dev,
-		  "failed to configure pwm with period %ld, duty cycle %ld: %d\n",
+		  "failed to configure pwm with period %d, duty cycle %d: %d\n",
 		  TLC5940_GSCLK_PERIOD_NS,
 		  TLC5940_GSCLK_DUTY_CYCLE_NS,
 		  ret
